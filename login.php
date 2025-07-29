@@ -11,28 +11,42 @@ if (mysqli_connect_errno()) {
     exit();
 }
 
+$errors = [];
+
 if (isset($_POST["login"])) {
-    $username = mysqli_real_escape_string($conn, $_POST["Username"]);
-    $password = mysqli_real_escape_string($conn, $_POST["Password"]);
+    $username = mysqli_real_escape_string($conn, trim($_POST["Username"]));
+    $password = trim($_POST["Password"]);
 
-    $result = mysqli_query($conn, "
-        SELECT user_id, user_name, user_username, user_is_worker 
-        FROM user 
-        WHERE user_username = '$username' AND user_password = '$password'
-    ");
+    if (empty($username)) $errors[] = "Username field is required.";
+    if (empty($password)) $errors[] = "Password field is required.";
 
-    if ($result->num_rows == 0) {
-        $error = "The username or password is incorrect.";
-    } else {
-        $row = mysqli_fetch_assoc($result);
+    if (empty($errors)) {
+        $result = mysqli_query($conn, "
+            SELECT user_id, user_name, user_username, user_password, user_is_worker, role
+            FROM user 
+            WHERE user_username = '$username'
+        ");
 
-        $_SESSION["user_id"] = $row["user_id"];
-        $_SESSION["is_worker"] = $row["user_is_worker"];
-        $_SESSION["name"] = $row["user_name"];
-        $_SESSION["username"] = $row["user_username"];
+        if ($result->num_rows == 0) {
+            $errors[] = "The username does not exist.";
+        } else {
+            $row = mysqli_fetch_assoc($result);
+
+            if (password_verify($password, $row['user_password'])) {
+                $_SESSION["user_id"] = $row["user_id"];
+                $_SESSION["is_worker"] = $row["user_is_worker"];
+                $_SESSION["name"] = $row["user_name"];
+                $_SESSION["username"] = $row["user_username"];
+              $_SESSION['role'] = $row['role'];
+
+
 
         header("Location: menu.php");
-        exit();
+                exit();
+            } else {
+                $errors[] = "The password is incorrect.";
+            }
+        }
     }
 }
 ?>
@@ -43,11 +57,7 @@ if (isset($_POST["login"])) {
     <meta charset="UTF-8" />
     <title>Pizza Royal - Login</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         html, body {
             height: 100%;
@@ -67,7 +77,6 @@ if (isset($_POST["login"])) {
             width: 380px;
             max-width: 90vw;
             text-align: center;
-            position: relative;
         }
 
         .login-container h1.title {
@@ -76,8 +85,6 @@ if (isset($_POST["login"])) {
             font-weight: 900;
             margin-bottom: 10px;
             letter-spacing: 3px;
-            user-select: none;
-            text-shadow: 2px 2px 5px rgba(255, 111, 0, 0.3);
         }
 
         .login-container h2.subtitle {
@@ -88,9 +95,23 @@ if (isset($_POST["login"])) {
             letter-spacing: 1.5px;
         }
 
-        form {
+        .error-box {
+            background-color: #fdd;
+            color: #b00020;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border: 1px solid #f99;
+            font-weight: 600;
             text-align: left;
         }
+
+        .error-box ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        form { text-align: left; }
 
         label {
             font-weight: 600;
@@ -129,12 +150,9 @@ if (isset($_POST["login"])) {
             border-radius: 14px;
             cursor: pointer;
             transition: background-color 0.3s ease;
-            user-select: none;
         }
 
-        button:hover {
-            background-color: #e65c00;
-        }
+        button:hover { background-color: #e65c00; }
 
         .register-btn {
             margin-top: 15px;
@@ -143,36 +161,13 @@ if (isset($_POST["login"])) {
             font-size: 1.1rem;
         }
 
-        .register-btn:hover {
-            background-color: #ffa726;
-        }
-
-        .error-msg {
-            color: #b00020;
-            font-weight: 700;
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 1.1rem;
-            user-select: none;
-        }
+        .register-btn:hover { background-color: #ffa726; }
 
         @media (max-width: 480px) {
-            .login-container {
-                width: 90vw;
-                padding: 30px 25px;
-            }
-
-            .login-container h1.title {
-                font-size: 2.4rem;
-            }
-
-            .login-container h2.subtitle {
-                font-size: 1.3rem;
-            }
-
-            button {
-                font-size: 1.1rem;
-            }
+            .login-container { width: 90vw; padding: 30px 25px; }
+            .login-container h1.title { font-size: 2.4rem; }
+            .login-container h2.subtitle { font-size: 1.3rem; }
+            button { font-size: 1.1rem; }
         }
     </style>
 </head>
@@ -181,13 +176,20 @@ if (isset($_POST["login"])) {
         <h1 class="title">Pizza Royal</h1>
         <h2 class="subtitle">Sign In</h2>
 
-        <?php if (isset($error)) : ?>
-            <div class="error-msg"><?= htmlspecialchars($error) ?></div>
+        <?php if (!empty($errors)): ?>
+            <div class="error-box">
+                <strong>Fix the following errors:</strong>
+                <ul>
+                    <?php foreach ($errors as $error): ?>
+                        <li><?= htmlspecialchars($error) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
         <?php endif; ?>
 
         <form method="post" autocomplete="off" novalidate>
             <label for="Username">Username:</label>
-            <input type="text" id="Username" name="Username" placeholder="Enter your username" required>
+            <input type="text" id="Username" name="Username" placeholder="Enter your username" value="<?= htmlspecialchars($_POST['Username'] ?? '') ?>" required>
 
             <label for="Password">Password:</label>
             <input type="password" id="Password" name="Password" placeholder="Enter your password" required minlength="4" maxlength="8">
