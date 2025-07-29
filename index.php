@@ -11,20 +11,36 @@ if (mysqli_connect_errno()) {
     exit();
 }
 
-if (isset($_POST["send"])) {
-    $name        = mysqli_real_escape_string($conn, $_POST["name"]);
-    $username    = mysqli_real_escape_string($conn, $_POST["Username"]);
-    $password    = mysqli_real_escape_string($conn, $_POST["Password"]);
-    $address     = mysqli_real_escape_string($conn, $_POST["adress"]);
-    $phone       = mysqli_real_escape_string($conn, $_POST["Phone"]);
-    $is_worker   = mysqli_real_escape_string($conn, $_POST["user_is_work"]);
+$errors = [];
 
-    if (!in_array($is_worker, ['yes', 'no'])) {
-        echo "<p style='color:red; text-align:center;'>Please select if you are a worker (yes or no).</p>";
-    } else {
+if (isset($_POST["send"])) {
+    $name      = mysqli_real_escape_string($conn, trim($_POST["name"]));
+    $username  = mysqli_real_escape_string($conn, trim($_POST["Username"]));
+    $password  = trim($_POST["Password"]);
+    $address   = mysqli_real_escape_string($conn, trim($_POST["adress"]));
+    $phone     = mysqli_real_escape_string($conn, trim($_POST["Phone"]));
+   
+
+    if (empty($name)) $errors[] = "Name field is required.";
+    if (empty($username)) $errors[] = "Username field is required.";
+    if (strlen($password) < 4 || strlen($password) > 8) $errors[] = "Password must be between 4 and 8 characters.";
+    if (!preg_match('/^[0-9]{10,15}$/', $phone)) $errors[] = "Phone number must be between 10 and 15 digits.";
+    if (empty($address)) $errors[] = "Address field is required.";
+    
+
+    if (empty($errors)) {
+        $checkQuery = "SELECT user_id FROM user WHERE user_username = '$username' LIMIT 1";
+        $checkResult = mysqli_query($conn, $checkQuery);
+        if (mysqli_num_rows($checkResult) > 0) {
+            $errors[] = "Username already exists. Please choose another one.";
+        }
+    }
+
+    if (empty($errors)) {
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
         $query = "
             INSERT INTO user (user_name, user_username, user_password, user_address, user_phone, user_is_worker)
-            VALUES ('$name', '$username', '$password', '$address', '$phone', '$is_worker')
+            VALUES ('$name', '$username', '$hashedPassword', '$address', '$phone', '$is_worker')
         ";
 
         if (mysqli_query($conn, $query)) {
@@ -32,7 +48,7 @@ if (isset($_POST["send"])) {
             header("Location: login.php");
             exit();
         } else {
-            echo "<p style='color:red; text-align:center;'>Error: " . mysqli_error($conn) . "</p>";
+            $errors[] = "Database error: " . mysqli_error($conn);
         }
     }
 }
@@ -72,8 +88,21 @@ if (isset($_POST["send"])) {
             color: #d84315;
             font-size: 3.2rem;
             font-weight: 900;
-            margin-bottom: 35px;
+            margin-bottom: 20px;
             letter-spacing: 3px;
+        }
+        .error-box {
+            background-color: #fdd;
+            color: #b00020;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border: 1px solid #f99;
+            font-weight: 600;
+        }
+        .error-box ul {
+            margin: 0;
+            padding-left: 20px;
         }
         label {
             font-weight: 600;
@@ -122,18 +151,22 @@ if (isset($_POST["send"])) {
         button:hover {
             opacity: 0.9;
         }
-        @media (max-width: 480px) {
-            form { width: 90vw; padding: 30px 20px; }
-            h1.main-title { font-size: 2.6rem; margin-bottom: 25px; }
-            input, select { font-size: 1rem; padding: 12px 14px; margin-bottom: 20px; }
-            button { font-size: 1rem; padding: 12px 30px; }
-            .buttons { gap: 15px; }
-        }
     </style>
 </head>
 <body>
     <form method="post" autocomplete="off" novalidate>
         <h1 class="main-title">Pizza Royal</h1>
+
+        <?php if (!empty($errors)): ?>
+            <div class="error-box">
+                <strong>Fix the following errors:</strong>
+                <ul>
+                    <?php foreach ($errors as $error): ?>
+                        <li><?= htmlspecialchars($error) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
 
         <label for="name">Name :</label>
         <input type="text" name="name" id="name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>">
@@ -150,12 +183,7 @@ if (isset($_POST["send"])) {
         <label for="adress">Address :</label>
         <input type="text" name="adress" id="adress" required value="<?= htmlspecialchars($_POST['adress'] ?? '') ?>">
 
-        <label for="user_is_work">Are you a worker? (yes/no):</label>
-        <select name="user_is_work" id="user_is_work" required>
-            <option value="">-- Select --</option>
-            <option value="yes" <?= ($_POST['user_is_work'] ?? '') == 'yes' ? 'selected' : '' ?>>Yes</option>
-            <option value="no" <?= ($_POST['user_is_work'] ?? '') == 'no' ? 'selected' : '' ?>>No</option>
-        </select>
+      
 
         <div class="buttons">
             <button type="reset">Reset</button>
